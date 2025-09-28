@@ -27,13 +27,12 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
 
         // Debug: show fetched posts
         debugDiv.textContent = `Posts fetched: ${data.steps.posts_fetched}\n` +
-                               `Posts matching keywords: ${data.steps.analyzed_posts ? data.steps.analyzed_posts.length : 0}\n\n` +
+                               `Posts matching keywords: ${data.steps.posts_matching_keywords || 0}\n\n` +
                                (data.steps.posts_fetched_preview || []).join("\n---\n");
 
         // Clear results container
         resultsDiv.innerHTML = "";
 
-        // Display analyzed posts
         if (data.steps && data.steps.analyzed_posts) {
             data.steps.analyzed_posts.forEach(post => {
                 const box = document.createElement("div");
@@ -43,39 +42,21 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
                 box.style.margin = "10px 0";
                 box.style.whiteSpace = "pre-wrap";
 
-                // Display full post text first
-                const fullTextEl = document.createElement("div");
-                fullTextEl.innerHTML = `<strong>Full post:</strong> ${post.text_full}`;
-                fullTextEl.style.marginBottom = "8px";
-                box.appendChild(fullTextEl);
+                // Color by overall sentiment
+                if (post.sentiment === "Positive") box.style.backgroundColor = "#cce5ff"; // light blue
+                else if (post.sentiment === "Negative") box.style.backgroundColor = "#f8d7da"; // light red
+                else box.style.backgroundColor = "#e2e3e5"; // grey
 
-                // Display overall sentiment
-                const overallEl = document.createElement("div");
-                overallEl.innerHTML = `<strong>Overall sentiment:</strong> ${post.sentiment}`;
-                overallEl.style.marginBottom = "8px";
-                // Color code overall sentiment
-                if (post.sentiment === "Positive") overallEl.style.color = "#004085"; // blue
-                else if (post.sentiment === "Negative") overallEl.style.color = "#721c24"; // red
-                else overallEl.style.color = "#383d41"; // grey
-                box.appendChild(overallEl);
+                // Build HTML content
+                let html = `<strong>Overall sentiment: [${post.sentiment}]</strong>\n`;
+                html += `${post.text_full}\n\n`;
+                html += "Clause-level sentiments:\n";
 
-                // Display per-clause sentiments
-                const clausesEl = document.createElement("div");
-                clausesEl.innerHTML = "<strong>Clause-level sentiments:</strong><br>";
-                post.clauses.forEach(([clauseText, clauseSentiment]) => {
-                    const clauseDiv = document.createElement("div");
-                    clauseDiv.textContent = `[${clauseSentiment}] ${clauseText}`;
-                    clauseDiv.style.paddingLeft = "10px";
-                    clauseDiv.style.marginBottom = "2px";
-                    // Color code clause
-                    if (clauseSentiment === "Positive") clauseDiv.style.backgroundColor = "#cce5ff";
-                    else if (clauseSentiment === "Negative") clauseDiv.style.backgroundColor = "#f8d7da";
-                    else clauseDiv.style.backgroundColor = "#e2e3e5";
-                    clauseDiv.style.borderRadius = "4px";
-                    clausesEl.appendChild(clauseDiv);
+                post.clauses.forEach(clause => {
+                    html += `[${clause.sentiment}] ${clause.text}\n`;
                 });
-                box.appendChild(clausesEl);
 
+                box.innerHTML = html;
                 resultsDiv.appendChild(box);
             });
         } else {

@@ -4,7 +4,6 @@ from flask_cors import CORS
 import requests
 import os
 from dotenv import load_dotenv
-from collections import Counter
 import re
 
 # Initialize app
@@ -19,6 +18,8 @@ classifier = pipeline("sentiment-analysis", model=model_name)
 print("Model loaded successfully!")
 
 label_map = {"LABEL_0": "Negative", "LABEL_1": "Neutral", "LABEL_2": "Positive"}
+numeric_map = {"Negative": -1, "Neutral": 0, "Positive": 1}
+reverse_numeric_map = {-1: "Negative", 0: "Neutral", 1: "Positive"}
 
 # --- Home ---
 @app.route('/')
@@ -74,7 +75,7 @@ def analyze_posts():
 
         posts = resp.get("response", {}).get("items", [])
         result["steps"]["posts_fetched"] = len(posts)
-        # Add debug preview of first 5 raw posts
+        # Debug preview of first 5 raw posts
         result["steps"]["posts_fetched_preview"] = [p.get("text", "")[:200] for p in posts[:5]]
         if not posts:
             return jsonify(result), 200
@@ -103,40 +104,46 @@ def analyze_posts():
         result["steps"]["raw_posts_preview"] = [p.get("text", "")[:200] for p in posts[:5]]
         return jsonify(result), 200
 
-    # Step 4: Sentiment analysis per clause
+    # Step 4: Sentiment analysis per clause with fluff removal and mean aggregation
     analyzed_posts = []
-    sentiments = []
 
     for text in filtered_posts[:20]:  # limit for speed
-        # Split text into clauses by punctuation
-        clauses = re.split(r'[.,;:—]', text)
-        clauses = [c.strip() for c in clauses if c.strip()]
+        clauses_raw = re.split(r'[.:]', text)
+        clauses = []
 
-        clause_sentiments = []
-        for clause in clauses[:20]:  # limit to first 20 clauses
-            analysis = classifier(clause)[0]
-            clause_sentiments.append(label_map[analysis['label']])
+        numeric_values = []
 
-        # Aggregate post sentiment (majority vote)
-        if clause_sentiments:
-            overall_sentiment = Counter(clause_sentiments).most_common(1)[0][0]
-        else:
-            overall_sentiment = "Neutral"
+        for clause in clauses_raw:
+            clause_clean = clause.strip()
+            if not clause_clean:
+                continue
+            # Skip fluff
+            if any(fluff in clause_clean.lower() for fluff in ["http", "https", "vk", "cc/", "max"]):
+                continue
 
-        sentiments.append(overall_sentiment)
+            analysis = classifier(clause_clean)[0]
+            sentiment = label_map.get(analysis["label"], analysis["label"])
+            numeric = numeric_map.get(sentiment, 0)
+            numeric_values.append(numeric)
+            clauses.append({"text": clause_clean, "sentiment": sentiment})
+
+        # Aggregate via mean
+        overall_numeric = 0
+        if numeric_values:
+            mean_value = sum(numeric_values) / len(numeric_values)
+            overall_numeric = round(mean_value)
+        overall_sentiment = reverse_numeric_map.get(overall_numeric, "Neutral")
+
         analyzed_posts.append({
             "text_full": text,
-            "clauses": list(zip(clauses, clause_sentiments)),
+            "clauses": clauses,
             "sentiment": overall_sentiment
         })
 
-    # Step 5: Aggregate overall sentiment
-    sentiment_mode = Counter(sentiments).most_common(1)[0][0]
-
-    result["steps"]["sentiment_mode"] = sentiment_mode
     result["steps"]["analyzed_posts"] = analyzed_posts
 
     return jsonify(result), 200
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
