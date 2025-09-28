@@ -4,9 +4,10 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
     const count = parseInt(document.getElementById('count').value) || 100;
 
     const resultsDiv = document.getElementById('results');
-    const debugDiv = document.getElementById('raw-posts-preview');
     resultsDiv.innerHTML = "Analyzing...";
-    debugDiv.textContent = "";
+
+    // const debugDiv = document.getElementById('raw-posts-preview'); // commented out
+    // debugDiv.textContent = "";
 
     try {
         const response = await fetch('/analyze', {
@@ -25,12 +26,10 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
 
         const data = await response.json();
 
-        // Debug: show fetched posts
-        debugDiv.textContent = `Posts fetched: ${data.steps.posts_fetched}\n` +
-                               `Posts matching keywords: ${data.steps.posts_matching_keywords || 0}\n\n` +
-                               (data.steps.posts_fetched_preview || []).join("\n---\n");
+        // debugDiv.textContent = `Posts fetched: ${data.steps.posts_fetched}\n` +
+        //                        `Posts matching keywords: ${data.steps.analyzed_posts ? data.steps.analyzed_posts.length : 0}\n\n` +
+        //                        (data.steps.raw_posts_preview || []).join("\n---\n");
 
-        // Clear results container
         resultsDiv.innerHTML = "";
 
         if (data.steps && data.steps.analyzed_posts) {
@@ -42,19 +41,21 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
                 box.style.margin = "10px 0";
                 box.style.whiteSpace = "pre-wrap";
 
-                // Color by overall sentiment
-                if (post.sentiment === "Positive") box.style.backgroundColor = "#cce5ff"; // light blue
-                else if (post.sentiment === "Negative") box.style.backgroundColor = "#f8d7da"; // light red
-                else box.style.backgroundColor = "#e2e3e5"; // grey
+                // Color by sentiment
+                if (post.sentiment === "Positive") box.style.backgroundColor = "#cce5ff";
+                else if (post.sentiment === "Negative") box.style.backgroundColor = "#f8d7da";
+                else box.style.backgroundColor = "#e2e3e5";
 
-                // Build HTML content
-                let html = `<strong>Overall sentiment: [${post.sentiment}]</strong>\n`;
-                html += `${post.text_full}\n\n`;
-                html += "Clause-level sentiments:\n";
+                let html = `<strong>[${post.sentiment}]</strong> ${post.text_full}\n`;
 
-                post.clauses.forEach(clause => {
-                    html += `[${clause.sentiment}] ${clause.text}\n`;
-                });
+                if (post.clauses && post.clauses.length > 0) {
+                    const uniqueId = 'clauses-' + Math.random().toString(36).substring(2, 10);
+                    html += `<details style="margin-top:5px;"><summary>Why [${post.sentiment}]?</summary><pre style="white-space: pre-wrap; margin:5px 0;">`;
+                    post.clauses.forEach(clause => {
+                        html += `[${clause.sentiment}] ${clause.text}\n`;
+                    });
+                    html += `</pre></details>`;
+                }
 
                 box.innerHTML = html;
                 resultsDiv.appendChild(box);

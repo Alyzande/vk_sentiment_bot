@@ -19,7 +19,6 @@ print("Model loaded successfully!")
 
 label_map = {"LABEL_0": "Negative", "LABEL_1": "Neutral", "LABEL_2": "Positive"}
 numeric_map = {"Negative": -1, "Neutral": 0, "Positive": 1}
-reverse_numeric_map = {-1: "Negative", 0: "Neutral", 1: "Positive"}
 
 # --- Home ---
 @app.route('/')
@@ -75,7 +74,6 @@ def analyze_posts():
 
         posts = resp.get("response", {}).get("items", [])
         result["steps"]["posts_fetched"] = len(posts)
-        # Debug preview of first 5 raw posts
         result["steps"]["posts_fetched_preview"] = [p.get("text", "")[:200] for p in posts[:5]]
         if not posts:
             return jsonify(result), 200
@@ -104,13 +102,12 @@ def analyze_posts():
         result["steps"]["raw_posts_preview"] = [p.get("text", "")[:200] for p in posts[:5]]
         return jsonify(result), 200
 
-    # Step 4: Sentiment analysis per clause with fluff removal and mean aggregation
+    # Step 4: Sentiment analysis per clause with fluff removal and mean-based threshold
     analyzed_posts = []
 
     for text in filtered_posts[:20]:  # limit for speed
         clauses_raw = re.split(r'[.:]', text)
         clauses = []
-
         numeric_values = []
 
         for clause in clauses_raw:
@@ -127,12 +124,14 @@ def analyze_posts():
             numeric_values.append(numeric)
             clauses.append({"text": clause_clean, "sentiment": sentiment})
 
-        # Aggregate via mean
-        overall_numeric = 0
+        # Aggregate via mean with threshold
+        overall_sentiment = "Neutral"
         if numeric_values:
             mean_value = sum(numeric_values) / len(numeric_values)
-            overall_numeric = round(mean_value)
-        overall_sentiment = reverse_numeric_map.get(overall_numeric, "Neutral")
+            if mean_value >= 0.1:
+                overall_sentiment = "Positive"
+            elif mean_value <= -0.1:
+                overall_sentiment = "Negative"
 
         analyzed_posts.append({
             "text_full": text,
