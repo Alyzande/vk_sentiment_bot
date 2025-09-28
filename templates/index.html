@@ -1,32 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Russian News Sentiment</title>
+  <meta charset="utf-8" />
+  <title>Russian News Sentiment</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>News Sentiment Analyzer</h1>
+  <div class="container">
+    <h1>Russian News Sentiment Analyzer</h1>
 
-    <label for="news-service">News Service:</label>
-    <select id="news-service">
-        <option value="tass">TASS</option>
-        <option value="ria">RIA</option>
-        <option value="rt">RT</option>
-    </select>
+    <div class="controls">
+      <div class="control">
+         <label for="news-service">News Service:</label>
+         <select id="news-service">
+           <option value="tass">TASS</option>
+           <option value="kommersant">Kommersant</option>
+           <option value="rt">RT</option>
+         </select>
+      </div>
 
-    <label for="keyword">Keyword:</label>
-    <select id="keyword">
-        <option value="украина">Украина</option>
-        <option value="киев">Киев</option>
-        <option value="донбасс">Донбасс</option>
-        <option value="теннис">Теннис</option>
-        <option value="спорт">Спорт</option>
-    </select>
+      <div class="control">
+        <label for="keyword">Keyword:</label>
+        <select id="keyword">
+          <!-- Ukraine-related suggestions -->
+          <option value="украин">Украина (general)</option>
+          <option value="киев">Киев</option>
+          <option value="донбасс">Донбасс</option>
+          <option value="донецк">Донецк</option>
+          <option value="луганск">Луганск</option>
+          <option value="специальная операция">Специальная операция</option>
+          <option value="война">Война</option>
+          <option value="потери">Потери / Casualties</option>
+        </select>
+      </div>
 
-    <button id="analyze-btn">Analyze</button>
-    <pre id="results"></pre>
+      <div class="control">
+        <label for="count">Posts:</label>
+        <input id="count" type="number" min="10" max="200" step="10" value="100">
+      </div>
 
-    <!-- Load your external JS -->
-    <script src="{{ url_for('static', filename='main.js') }}"></script>
+      <div class="control">
+        <button id="analyze-btn">Analyze</button>
+      </div>
+    </div>
+
+    <div id="status" class="status">Idle</div>
+
+    <h2>Debug: Raw Posts Preview</h2>
+    <pre id="raw-posts-preview" style="background:#f0f0f0; padding:10px; max-height:200px; overflow:auto;"></pre>
+
+    <h2>Analyzed Posts</h2>
+    <div id="results" class="results-grid">
+      <!-- JS will render post cards here -->
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='main.js') }}"></script>
 </body>
 </html>

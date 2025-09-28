@@ -5,6 +5,7 @@ import requests
 import os
 from dotenv import load_dotenv
 from collections import Counter
+import re
 
 # Initialize app
 app = Flask(__name__)
@@ -24,17 +25,11 @@ label_map = {"LABEL_0": "Negative", "LABEL_1": "Neutral", "LABEL_2": "Positive"}
 def home():
     return render_template('index.html')
 
-# --- Analyze TASS posts ---
-@app.route('/analyze_tass', methods=['POST'])
-def analyze_tass_posts():
-    """
-    Expects JSON:
-    {
-        "count": 100,           # optional, default 100 posts
-        "keywords": ["политика", "экономика"]
-    }
-    """
+# --- Analyze posts from TASS, Kommersant, or RT ---
+@app.route('/analyze', methods=['POST'])
+def analyze_posts():
     data = request.get_json()
+    news_service = data.get("news_service", "tass")
     count = data.get("count", 100)
     keywords = data.get("keywords", [])
 
@@ -42,14 +37,21 @@ def analyze_tass_posts():
     if not VK_TOKEN:
         return jsonify({"error": "VK access token not set"}), 500
 
+    # Map frontend dropdown → VK group domains
+    news_sources = {
+        "tass": "tassagency",
+        "kommersant": "kommersant",
+        "rt": "rt_russian"
+    }
+    group_domain = news_sources.get(news_service, "tassagency")
+
     result = {"steps": {}}
 
-    # Step 1: Get TASS group info
-    tass_domain = "tassagency"
+    # Step 1: Get group info
     try:
         resp = requests.get(
             "https://api.vk.com/method/groups.getById",
-            params={"group_id": tass_domain, "access_token": VK_TOKEN, "v": "5.131"}
+            params={"group_id": group_domain, "access_token": VK_TOKEN, "v": "5.131"}
         ).json()
 
         if "error" in resp:
@@ -63,7 +65,7 @@ def analyze_tass_posts():
         result["steps"]["connect_to_group"] = f"Exception: {str(e)}"
         return jsonify(result), 500
 
-    # Step 2: Fetch posts from wall
+    # Step 2: Fetch posts
     try:
         resp = requests.get(
             "https://api.vk.com/method/wall.get",
@@ -72,50 +74,63 @@ def analyze_tass_posts():
 
         posts = resp.get("response", {}).get("items", [])
         result["steps"]["posts_fetched"] = len(posts)
+        # Add debug preview of first 5 raw posts
+        result["steps"]["posts_fetched_preview"] = [p.get("text", "")[:200] for p in posts[:5]]
         if not posts:
             return jsonify(result), 200
-
-        # DEBUG: return first 10 raw posts so you can see what is actually posted
-        result["steps"]["raw_posts_preview"] = [p.get("text", "") for p in posts[:10]]
 
     except Exception as e:
         result["steps"]["posts_fetched"] = f"Exception: {str(e)}"
         return jsonify(result), 500
 
-    # Step 3: Filter posts by keywords (case-insensitive)
+    # Step 3: Filter posts by keywords
     filtered_posts = []
+    keyword_patterns = [re.compile(re.escape(kw.lower())) for kw in keywords]
+
     for post in posts:
         text = post.get("text", "")
         if not text:
             continue
-        text_lower = text.lower()
+        text_clean = re.sub(r"[^\w\s]", "", text.lower())
         if keywords:
-            for kw in keywords:
-                if kw.lower() in text_lower:
-                    filtered_posts.append(text)
-                    break
+            if any(p.search(text_clean) for p in keyword_patterns):
+                filtered_posts.append(text)
         else:
             filtered_posts.append(text)
 
     result["steps"]["posts_matching_keywords"] = len(filtered_posts)
     if not filtered_posts:
+        result["steps"]["raw_posts_preview"] = [p.get("text", "")[:200] for p in posts[:5]]
         return jsonify(result), 200
 
-    # Step 4: Sentiment analysis
+    # Step 4: Sentiment analysis (first sentence only)
+    analyzed_posts = []
     sentiments = []
-    for text in filtered_posts:
-        analysis = classifier(text)[0]
+
+    for text in filtered_posts[:20]:  # limit for speed
+        # Take the first sentence/fragment only
+        fragment = text.split(".")[0].split(":")[0].strip()
+        if not fragment:
+            fragment = text[:100]  # fallback: first 100 chars
+
+        analysis = classifier(fragment)[0]
         sentiment = label_map.get(analysis["label"], analysis["label"])
         sentiments.append(sentiment)
 
-    # Step 5: Aggregate mode
+        # Keep full text for display
+        analyzed_posts.append({
+            "text_full": text,
+            "text_fragment": fragment,
+            "sentiment": sentiment
+        })
+
+    # Step 5: Aggregate sentiment
     sentiment_mode = Counter(sentiments).most_common(1)[0][0]
 
     result["steps"]["sentiment_mode"] = sentiment_mode
-    result["steps"]["all_filtered_posts_preview"] = filtered_posts[:5]  # first 5 posts for debug
+    result["steps"]["analyzed_posts"] = analyzed_posts
 
     return jsonify(result), 200
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
