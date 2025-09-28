@@ -103,28 +103,34 @@ def analyze_posts():
         result["steps"]["raw_posts_preview"] = [p.get("text", "")[:200] for p in posts[:5]]
         return jsonify(result), 200
 
-    # Step 4: Sentiment analysis (first sentence only)
+    # Step 4: Sentiment analysis per clause
     analyzed_posts = []
     sentiments = []
 
     for text in filtered_posts[:20]:  # limit for speed
-        # Take the first sentence/fragment only
-        fragment = text.split(".")[0].split(":")[0].strip()
-        if not fragment:
-            fragment = text[:100]  # fallback: first 100 chars
+        # Split text into clauses by punctuation
+        clauses = re.split(r'[.,;:—]', text)
+        clauses = [c.strip() for c in clauses if c.strip()]
 
-        analysis = classifier(fragment)[0]
-        sentiment = label_map.get(analysis["label"], analysis["label"])
-        sentiments.append(sentiment)
+        clause_sentiments = []
+        for clause in clauses[:20]:  # limit to first 20 clauses
+            analysis = classifier(clause)[0]
+            clause_sentiments.append(label_map[analysis['label']])
 
-        # Keep full text for display
+        # Aggregate post sentiment (majority vote)
+        if clause_sentiments:
+            overall_sentiment = Counter(clause_sentiments).most_common(1)[0][0]
+        else:
+            overall_sentiment = "Neutral"
+
+        sentiments.append(overall_sentiment)
         analyzed_posts.append({
             "text_full": text,
-            "text_fragment": fragment,
-            "sentiment": sentiment
+            "clauses": list(zip(clauses, clause_sentiments)),
+            "sentiment": overall_sentiment
         })
 
-    # Step 5: Aggregate sentiment
+    # Step 5: Aggregate overall sentiment
     sentiment_mode = Counter(sentiments).most_common(1)[0][0]
 
     result["steps"]["sentiment_mode"] = sentiment_mode
